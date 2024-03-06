@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "cloudtictactoe-backend"
+version = "0.1.0"
+description = "Quart backend for the Tic Tac Toe game"
+authors = ["Monczak <szymon.jedrzejczak.sj@gmail.com>"]
+readme = "README.md"
+package-mode = false
+packages = [ { include = "api" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+Quart = "^0.19.4"
+Hypercorn = "^0.16.0"
+redis = "^5.0.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
