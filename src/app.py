@@ -14,10 +14,12 @@ connected = set()
 
 
 class TicTacToeGameWrapper:
-    def __init__(self, player_o, player_x) -> None:
+    def __init__(self, player_o_websocket, player_o_name, player_x_websocket, player_x_name) -> None:
         self.game_data = TicTacToeGame()
-        self.player_o = player_o
-        self.player_x = player_x
+        self.player_o = player_o_websocket
+        self.player_x = player_x_websocket
+        self.player_o_name = player_o_name
+        self.player_x_name = player_x_name
 
     def is_player_turn(self, ctx) -> bool:
         player = self.get_player(ctx)
@@ -38,6 +40,7 @@ class TicTacToeGameWrapper:
 
 
 games = {}
+player_data = {}
 
 
 def collect_websocket(func):
@@ -66,6 +69,7 @@ async def handle_message(ctx, message):
             if ctx in games:
                 raise ValueError("Already in a game")
 
+            player_data[ctx] = message["playerName"]
             matchmaking_queue.add(ctx)
             await ctx.send_json({"intent": "info", "description": "Joined matchmaking queue"})
 
@@ -74,12 +78,12 @@ async def handle_message(ctx, message):
                 matchmaking_queue.remove(player1)
                 matchmaking_queue.remove(player2)
 
-                game = TicTacToeGameWrapper(player1, player2)
+                game = TicTacToeGameWrapper(player1, player_data[player1], player2, player_data[player2])
                 games[player1] = game
                 games[player2] = game
 
-                await player1.send_json({"intent": "game_start", "player": "o"})
-                await player2.send_json({"intent": "game_start", "player": "x"})  
+                await player1.send_json({"intent": "game_start", "player": "o", "opponentName": game.player_x_name})
+                await player2.send_json({"intent": "game_start", "player": "x", "opponentName": game.player_o_name})  
            
         case "make_move":
             if ctx not in games:
@@ -98,9 +102,11 @@ async def handle_message(ctx, message):
             await game.player_o.send_json(response)
             await game.player_x.send_json(response)
 
-            if result == MoveResult.WIN_O or result == MoveResult.WIN_X:
+            if result in (MoveResult.WIN_O, MoveResult.WIN_X):
                 games.pop(game.player_o)
                 games.pop(game.player_x)
+                player_data.pop(game.player_o)
+                player_data.pop(game.player_x)
 
         case _:
             raise ValueError("Invalid intent")
@@ -123,6 +129,8 @@ async def ws(ctx):
                 game = games[ctx]
                 games.pop(game.player_o)
                 games.pop(game.player_x)
+                player_data.pop(game.player_o)
+                player_data.pop(game.player_x)
 
                 opponent = game.player_o if ctx == game.player_x else game.player_x
                 await opponent.send_json({"intent": "error", "description": "Opponent disconnected"})
