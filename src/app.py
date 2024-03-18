@@ -62,6 +62,9 @@ async def index():
 
 async def handle_message(ctx, message):
     match message["intent"]:
+        case "pingpong":
+            await ctx.send_json({"intent": "pingpong"})
+
         case "join_match":
             if ctx in matchmaking_queue:
                 raise ValueError("Already in matchmaking queue")
