@@ -5,7 +5,6 @@ description = "Quart backend for the Tic Tac Toe game"
 authors = ["Monczak <szymon.jedrzejczak.sj@gmail.com>"]
 readme = "README.md"
 package-mode = false
-packages = [ { include = "api" }]
 
 [tool.poetry.dependencies]
 python = "^3.11"

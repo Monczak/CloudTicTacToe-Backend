@@ -1,4 +1,4 @@
-ARG PORT=8000
+ARG PORT=8001
 
 FROM python:3.11.7-alpine
 ARG PORT
@@ -21,7 +21,7 @@ COPY poetry.lock pyproject.toml /app/
 
 RUN poetry install 
 
-COPY . /app
+COPY ./src /app/src
 
 CMD poetry run hypercorn --bind 0.0.0.0:$SERVER_PORT src/app:app
 EXPOSE $SERVER_PORT
