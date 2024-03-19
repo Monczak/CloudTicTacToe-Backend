@@ -101,7 +101,13 @@ async def handle_message(ctx, message):
             if result == MoveResult.INVALID:
                 raise ValueError("Illegal move")
 
-            response = {"intent": "move_result", "player": game.get_player(ctx).value, "moveResult": result.value, "boardState": list(map(lambda player: player.value, game.game_data.board))}
+            response = {
+                "intent": "move_result", 
+                "player": game.get_player(ctx).value, 
+                "moveResult": result.value, 
+                "boardState": list(map(lambda player: player.value, game.game_data.board)), 
+                "newestMove": message["cellIdx"]
+            }
             await game.player_o.send_json(response)
             await game.player_x.send_json(response)
 
