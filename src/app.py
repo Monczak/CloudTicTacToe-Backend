@@ -46,12 +46,12 @@ player_data = {}
 def collect_websocket(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        global connected
-        connected.add(websocket._get_current_object())
+        websocket_obj = websocket._get_current_object()
+        connected.add(websocket_obj)
         try:
-            return await func(websocket._get_current_object(), *args, **kwargs)
+            return await func(websocket_obj, *args, **kwargs)
         finally:
-            connected.remove(websocket._get_current_object())
+            connected.remove(websocket_obj)
     return wrapper
 
 
