@@ -17,11 +17,11 @@ RUN python3 -m venv $POETRY_VENV \
 ENV PATH="${PATH}:${POETRY_VENV}/bin"
 
 WORKDIR /app
-COPY poetry.lock pyproject.toml /app/
+COPY poetry.lock pyproject.toml run.sh /app/
 
 RUN poetry install 
 
 COPY ./src /app/src
 
-CMD poetry run hypercorn --bind 0.0.0.0:$SERVER_PORT src/app:app
+ENTRYPOINT run.sh
 EXPOSE $SERVER_PORT

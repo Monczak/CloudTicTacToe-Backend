@@ -150,7 +150,7 @@ async def ws(ctx):
 
 
 def main():
-    app.run(debug=True)
+    app.run(debug=True, ssl_context=("cert.pem", "key.pem"))
 
 
 if __name__ == "__main__":
