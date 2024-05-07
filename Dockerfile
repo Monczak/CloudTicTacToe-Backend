@@ -3,6 +3,8 @@ ARG PORT=8001
 FROM python:3.11.7-alpine
 ARG PORT
 
+RUN apk add openssl
+
 ENV SERVER_PORT=$PORT
 
 ENV POETRY_VERSION=1.8.2
@@ -23,5 +25,5 @@ RUN poetry install
 
 COPY ./src /app/src
 
-ENTRYPOINT run.sh
+ENTRYPOINT ["sh", "/app/run.sh" ]
 EXPOSE $SERVER_PORT

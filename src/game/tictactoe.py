@@ -9,10 +9,10 @@ class Player(enum.Enum):
 
 
 class MoveResult(enum.Enum):
-    NONE = "none",
-    INVALID = "invalid",
-    WIN_O = "winO",
-    WIN_X = "winX",
+    NONE = "none"
+    INVALID = "invalid"
+    WIN_O = "winO"
+    WIN_X = "winX"
     DRAW = "draw"
 
 

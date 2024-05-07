@@ -46,12 +46,12 @@ player_data = {}
 def collect_websocket(func):
     @wraps(func)
     async def wrapper(*args, **kwargs):
-        global connected
-        connected.add(websocket._get_current_object())
+        websocket_obj = websocket._get_current_object()
+        connected.add(websocket_obj)
         try:
-            return await func(websocket._get_current_object(), *args, **kwargs)
+            return await func(websocket_obj, *args, **kwargs)
         finally:
-            connected.remove(websocket._get_current_object())
+            connected.remove(websocket_obj)
     return wrapper
 
 
@@ -85,8 +85,8 @@ async def handle_message(ctx, message):
                 games[player1] = game
                 games[player2] = game
 
-                await player1.send_json({"intent": "game_start", "player": "o", "opponentName": game.player_x_name})
-                await player2.send_json({"intent": "game_start", "player": "x", "opponentName": game.player_o_name})  
+                await player1.send_json({"intent": "game_start", "player": Player.O.value, "opponentName": game.player_x_name})
+                await player2.send_json({"intent": "game_start", "player": Player.X.value, "opponentName": game.player_o_name})  
            
         case "make_move":
             if ctx not in games:
@@ -111,7 +111,7 @@ async def handle_message(ctx, message):
             await game.player_o.send_json(response)
             await game.player_x.send_json(response)
 
-            if result in (MoveResult.WIN_O, MoveResult.WIN_X):
+            if result in (MoveResult.WIN_O, MoveResult.WIN_X, MoveResult.DRAW):
                 games.pop(game.player_o)
                 games.pop(game.player_x)
                 player_data.pop(game.player_o)
