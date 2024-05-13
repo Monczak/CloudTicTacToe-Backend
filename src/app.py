@@ -4,12 +4,12 @@ import os
 import random
 from typing import List, Dict
 from functools import wraps
+import boto3
+import botocore
 import boto3.exceptions
 import botocore.errorfactory
 import botocore.exceptions
 from quart import Quart, websocket, request, jsonify
-import boto3
-import botocore
 
 from game.tictactoe import Player, TicTacToeGame, MoveResult
 
@@ -70,7 +70,30 @@ async def index():
     return "Hello World!"
 
 
-@app.route("/auth")
+@app.route("/auth/get_user", methods=["GET"])
+async def auth_get_user():
+    bearer = request.headers.get("Authorization")
+    if bearer is None:
+        return jsonify({"intent":"error", "description":"No auth token specified"}), 403
+
+    access_token = bearer.split()[1]
+    try:
+        response = cognito.get_user(AccessToken=access_token)
+        attributes = response["UserAttributes"]
+        data = {
+            "username": response["Username"],
+            "email": [a for a in attributes if a["Name"] == "email"][0]["Value"],
+            "email_verified": [a for a in attributes if a["Name"] == "email_verified"][0]["Value"],
+            "sub": [a for a in attributes if a["Name"] == "sub"][0]["Value"],
+        }
+        return jsonify({"intent": "success", **data}), 200
+    except botocore.exceptions.ClientError as e:
+        match e.response["Error"]["Code"]:
+            case "NotAuthorizedException" | "UserNotFoundException":
+                return jsonify({"intent":"error", "description": "Unauthorized"}), 403
+
+
+@app.route("/auth", methods=["GET", "POST"])
 async def auth():
     request_json = await request.json
     match request.args.get("action"):
@@ -91,7 +114,13 @@ async def auth():
             except botocore.exceptions.ClientError as e: 
                 match e.response["Error"]["Code"]:
                     case "InvalidParameterException":
-                        pass
+                        return jsonify({"intent":"error","description":"Invalid email, username or password"}), 400
+                    case "UserExistsException":
+                        return jsonify({"intent":"error","description":"This user already exists"}), 400
+                    case "UsernameExistsException":
+                        return jsonify({"intent":"error","description":"A user with this username already exists. Pick a different username"}), 400
+                    case _:
+                        return jsonify({"intent":"error","description":e.response["Error"]["Message"]}), 400
 
         case "login":
             try:
