@@ -20,7 +20,7 @@ matchmaking_queue = set()
 connected = set()
 
 
-client_id = os.environ.get("COGNITO_CLIENT_ID")
+client_id = os.environ["COGNITO_CLIENT_ID"]
 
 
 class TicTacToeGameWrapper:
