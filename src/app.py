@@ -1,16 +1,26 @@
 import asyncio
 import json
+import os
 import random
 from typing import List, Dict
 from functools import wraps
-from quart import Quart, websocket
+import boto3.exceptions
+import botocore.errorfactory
+import botocore.exceptions
+from quart import Quart, websocket, request, jsonify
+import boto3
+import botocore
 
 from game.tictactoe import Player, TicTacToeGame, MoveResult
 
 app = Quart(__name__)
+cognito = boto3.client("cognito-idp", region_name="us-east-1")
 
 matchmaking_queue = set()
 connected = set()
+
+
+client_id = os.environ.get("COGNITO_CLIENT_ID")
 
 
 class TicTacToeGameWrapper:
@@ -58,6 +68,82 @@ def collect_websocket(func):
 @app.route("/")
 async def index():
     return "Hello World!"
+
+
+@app.route("/auth")
+async def auth():
+    request_json = await request.json
+    match request.args.get("action"):
+        case "signup":
+            try: 
+                response = cognito.sign_up(
+                    ClientId=client_id,
+                    Username=request_json["username"],
+                    Password=request_json["password"],
+                    UserAttributes=[
+                        {
+                            "Name": "email",
+                            "Value": request_json["email"]
+                        }
+                    ]
+                )
+                return jsonify({"intent":"awaiting_verification"}), 200
+            except botocore.exceptions.ClientError as e: 
+                match e.response["Error"]["Code"]:
+                    case "InvalidParameterException":
+                        pass
+
+        case "login":
+            try:
+                response = cognito.initiate_auth(
+                    ClientId=client_id,
+                    AuthFlow="USER_PASSWORD_AUTH",
+                    AuthParameters={
+                        "USERNAME":request_json["username"],
+                        "PASSWORD":request_json["password"]
+                    }
+                )
+                return jsonify({
+                    "intent":"success", 
+                    "access_token": response["AuthenticationResult"]["AccessToken"],
+                    "refresh_token": response["AuthenticationResult"]["RefreshToken"],
+                    "token_type": response["AuthenticationResult"]["TokenType"],
+                    "expires_in": response["AuthenticationResult"]["ExpiresIn"]
+                    }), 200
+            except botocore.exceptions.ClientError as e: 
+                match e.response["Error"]["Code"]:
+                    case "NotAuthorizedException":
+                        return jsonify({"intent":"error","description":"Invalid username or password"}), 400
+                    case "UserNotConfirmedException":
+                        return jsonify({"intent":"error","description":"User not confirmed"}), 400
+
+        case "verify":
+            try:
+                response = cognito.confirm_sign_up(
+                    ClientId=client_id,
+                    Username=request_json["username"],
+                    ConfirmationCode=request_json["code"]
+                )
+                return jsonify({"intent":"success"}), 200
+            except botocore.exceptions.ClientError as e: 
+                match e.response["Error"]["Code"]:
+                    case "CodeMismatchException" | "ExpiredCodeException":
+                        return jsonify({"intent":"error","description":"Wrong verification code"}), 400
+
+        case "logout":
+            try:
+                bearer = request.headers.get("Authorization")
+                response = cognito.global_sign_out(
+                    AccessToken=bearer.split()[1]
+                )
+                return jsonify({"intent":"success", }), 200
+            except botocore.exceptions.ClientError as e: 
+                match e.response["Error"]["Code"]:
+                    case "NotAuthorizedException":
+                        return jsonify({"intent":"error","description":"Token revoked"}), 400
+
+        case _:
+            return jsonify({"intent":"error","description":"Invalid auth action"}), 400
 
 
 async def handle_message(ctx, message):

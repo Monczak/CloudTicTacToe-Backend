@@ -11,6 +11,8 @@ python = "^3.11"
 Quart = "^0.19.4"
 Hypercorn = "^0.16.0"
 redis = "^5.0.2"
+boto3 = "^1.34.103"
+python-dotenv = "^1.0.1"
 
 
 [build-system]
