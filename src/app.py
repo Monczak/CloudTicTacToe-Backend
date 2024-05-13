@@ -77,20 +77,11 @@ async def auth_get_user():
         return jsonify({"intent":"error", "description":"No auth token specified"}), 403
 
     access_token = bearer.split()[1]
-    try:
-        response = cognito.get_user(AccessToken=access_token)
-        attributes = response["UserAttributes"]
-        data = {
-            "username": response["Username"],
-            "email": [a for a in attributes if a["Name"] == "email"][0]["Value"],
-            "email_verified": [a for a in attributes if a["Name"] == "email_verified"][0]["Value"],
-            "sub": [a for a in attributes if a["Name"] == "sub"][0]["Value"],
-        }
-        return jsonify({"intent": "success", **data}), 200
-    except botocore.exceptions.ClientError as e:
-        match e.response["Error"]["Code"]:
-            case "NotAuthorizedException" | "UserNotFoundException":
-                return jsonify({"intent":"error", "description": "Unauthorized"}), 403
+    user_data = get_user_data(access_token)
+    if user_data is None:
+        return jsonify({"intent":"error", "description": "Unauthorized"}), 403
+
+    return jsonify({"intent":"success", **user_data})
 
 
 @app.route("/auth", methods=["GET", "POST"])
@@ -175,19 +166,42 @@ async def auth():
             return jsonify({"intent":"error","description":"Invalid auth action"}), 400
 
 
+def get_user_data(token):
+    try:
+        response = cognito.get_user(AccessToken=token)
+        attributes = response["UserAttributes"]
+        data = {
+            "username": response["Username"],
+            "email": [a for a in attributes if a["Name"] == "email"][0]["Value"],
+            "email_verified": [a for a in attributes if a["Name"] == "email_verified"][0]["Value"],
+            "sub": [a for a in attributes if a["Name"] == "sub"][0]["Value"],
+        }
+        return data
+    except botocore.exceptions.ClientError as e:
+        match e.response["Error"]["Code"]:
+            case "NotAuthorizedException" | "UserNotFoundException":
+                return None
+
+
 async def handle_message(ctx, message):
+    token = message.get("token")
+
     match message["intent"]:
         case "pingpong":
             await ctx.send_json({"intent": "pingpong"})
 
         case "join_match":
+            user_data = get_user_data(token)
+            if user_data is None:
+                raise ValueError("Unauthorized")
+
             if ctx in matchmaking_queue:
                 raise ValueError("Already in matchmaking queue")
             
             if ctx in games:
                 raise ValueError("Already in a game")
 
-            player_data[ctx] = message["playerName"]
+            player_data[ctx] = user_data["username"]
             matchmaking_queue.add(ctx)
             await ctx.send_json({"intent": "info", "description": "Joined matchmaking queue"})
 
@@ -204,6 +218,9 @@ async def handle_message(ctx, message):
                 await player2.send_json({"intent": "game_start", "player": Player.X.value, "opponentName": game.player_o_name})  
            
         case "make_move":
+            if get_user_data(token) is None:
+                raise ValueError("Unauthorized")
+
             if ctx not in games:
                 raise ValueError("Not in a game")
             
