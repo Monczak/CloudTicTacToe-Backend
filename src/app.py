@@ -74,12 +74,12 @@ async def index():
 async def auth_get_user():
     bearer = request.headers.get("Authorization")
     if bearer is None:
-        return jsonify({"intent":"error", "description":"No auth token specified"}), 403
+        return jsonify({"intent":"error", "description":"No auth token specified"}), 401
 
     access_token = bearer.split()[1]
     user_data = get_user_data(access_token)
     if user_data is None:
-        return jsonify({"intent":"error", "description": "Unauthorized"}), 403
+        return jsonify({"intent":"error", "description": "Unauthorized"}), 401
 
     return jsonify({"intent":"success", **user_data})
 
@@ -87,7 +87,7 @@ async def auth_get_user():
 @app.route("/auth", methods=["GET", "POST"])
 async def auth():
     request_json = await request.json
-    match request.args.get("action"):
+    match action := request.args.get("action"):
         case "signup":
             try: 
                 response = cognito.sign_up(
@@ -113,14 +113,16 @@ async def auth():
                     case _:
                         return jsonify({"intent":"error","description":e.response["Error"]["Message"]}), 400
 
-        case "login":
+        case "login" | "refresh":
             try:
                 response = cognito.initiate_auth(
                     ClientId=client_id,
-                    AuthFlow="USER_PASSWORD_AUTH",
+                    AuthFlow="USER_PASSWORD_AUTH" if action == "login" else "REFRESH_TOKEN",
                     AuthParameters={
                         "USERNAME":request_json["username"],
                         "PASSWORD":request_json["password"]
+                    } if action == "login" else {
+                        "REFRESH_TOKEN": request_json["refresh_token"]
                     }
                 )
                 return jsonify({
@@ -160,7 +162,7 @@ async def auth():
             except botocore.exceptions.ClientError as e: 
                 match e.response["Error"]["Code"]:
                     case "NotAuthorizedException":
-                        return jsonify({"intent":"error","description":"Token revoked"}), 400
+                        return jsonify({"intent":"error","description":"Token revoked"}), 401
 
         case _:
             return jsonify({"intent":"error","description":"Invalid auth action"}), 400
