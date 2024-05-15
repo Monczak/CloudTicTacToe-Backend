@@ -112,6 +112,9 @@ async def auth():
                         return jsonify({"intent":"error","description":"A user with this username already exists. Pick a different username"}), 400
                     case _:
                         return jsonify({"intent":"error","description":e.response["Error"]["Message"]}), 400
+            except Exception as e:
+                return jsonify({"intent":"error","description":str(e)}), 400
+                        
 
         case "login" | "refresh":
             try:
@@ -138,6 +141,11 @@ async def auth():
                         return jsonify({"intent":"error","description":"Invalid username or password"}), 400
                     case "UserNotConfirmedException":
                         return jsonify({"intent":"error","description":"User not confirmed"}), 400
+                    case _:
+                        return jsonify({"intent":"error","description":e.response["Error"]["Message"]}), 400
+
+            except Exception as e:
+                return jsonify({"intent":"error","description":str(e)}), 400
 
         case "verify":
             try:
@@ -151,6 +159,10 @@ async def auth():
                 match e.response["Error"]["Code"]:
                     case "CodeMismatchException" | "ExpiredCodeException":
                         return jsonify({"intent":"error","description":"Wrong verification code"}), 400
+                    case _:
+                        return jsonify({"intent":"error","description":e.response["Error"]["Message"]}), 400
+            except Exception as e:
+                return jsonify({"intent":"error","description":str(e)}), 400
 
         case "logout":
             try:
@@ -163,6 +175,10 @@ async def auth():
                 match e.response["Error"]["Code"]:
                     case "NotAuthorizedException":
                         return jsonify({"intent":"error","description":"Token revoked"}), 401
+                    case _:
+                        return jsonify({"intent":"error","description":e.response["Error"]["Message"]}), 400
+            except Exception as e:
+                return jsonify({"intent":"error","description":str(e)}), 400
 
         case _:
             return jsonify({"intent":"error","description":"Invalid auth action"}), 400
@@ -183,6 +199,8 @@ def get_user_data(token):
         match e.response["Error"]["Code"]:
             case "NotAuthorizedException" | "UserNotFoundException":
                 return None
+            case _:
+                return jsonify({"intent":"error","description":e.response["Error"]["Message"]}), 400
 
 
 async def handle_message(ctx, message):
