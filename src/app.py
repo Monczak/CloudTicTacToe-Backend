@@ -4,17 +4,27 @@ import os
 import random
 from typing import List, Dict
 from functools import wraps
+from io import BytesIO
 import boto3
 import botocore
 import boto3.exceptions
 import botocore.errorfactory
 import botocore.exceptions
-from quart import Quart, websocket, request, jsonify
+import aioboto3
+from quart import Quart, websocket, request, jsonify, send_file
+import requests
 
 from game.tictactoe import Player, TicTacToeGame, MoveResult
 
+REGION = "us-east-1"
+AVATAR_BUCKET = "cloudtictactoe-avatars"
+
 app = Quart(__name__)
-cognito = boto3.client("cognito-idp", region_name="us-east-1")
+cognito = boto3.client("cognito-idp", region_name=REGION)
+s3 = boto3.client("s3", region_name=REGION, 
+                  aws_access_key_id=os.environ["aws_access_key_id"], 
+                  aws_secret_access_key=os.environ["aws_secret_access_key"],
+                  aws_session_token=os.environ["aws_session_token"])
 
 matchmaking_queue = set()
 connected = set()
@@ -84,12 +94,43 @@ async def auth_get_user():
     return jsonify({"intent":"success", **user_data})
 
 
+@app.route("/upload-avatar", methods=["POST"])
+async def upload_avatar():
+    request_files = await request.files
+    username = request.args.get("username")
+
+    if username is None:
+        return {"intent": "error", "description": "Username needs to be specified"}, 400
+
+    if "avatar" in request_files:
+        avatar_file = request_files["avatar"]
+        file_key = username
+
+        s3.upload_fileobj(avatar_file, AVATAR_BUCKET, file_key)
+    
+    return {"intent": "success"}
+
+
+@app.route("/get-avatar", methods=["GET"])
+async def get_avatar():
+    username = request.args.get("username")
+    if username is None:
+        return {"intent": "error", "description": "Username needs to be specified"}, 400
+    
+    url = f"https://{AVATAR_BUCKET}.s3.amazonaws.com/{username}"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return jsonify({"intent": "success", "url": f"https://{AVATAR_BUCKET}.s3.amazonaws.com/{username}"})
+        
+    return jsonify({"intent": "error", "description": "No avatar found for this user"})
+
+
 @app.route("/auth", methods=["GET", "POST"])
 async def auth():
     request_json = await request.json
     match action := request.args.get("action"):
         case "signup":
-            try: 
+            try:
                 response = cognito.sign_up(
                     ClientId=client_id,
                     Username=request_json["username"],
@@ -101,6 +142,7 @@ async def auth():
                         }
                     ]
                 )
+
                 return jsonify({"intent":"awaiting_verification"}), 200
             except botocore.exceptions.ClientError as e: 
                 match e.response["Error"]["Code"]:
