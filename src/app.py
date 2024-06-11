@@ -14,7 +14,7 @@ import aioboto3
 from quart import Quart, websocket, request, jsonify, send_file
 from quart_sqlalchemy import SQLAlchemyConfig
 from quart_sqlalchemy.framework import QuartSQLAlchemy
-from sqlalchemy import Identity, Integer, String
+from sqlalchemy import Identity, Integer, String, select
 from sqlalchemy.orm import Mapped, mapped_column
 import requests
 
@@ -255,6 +255,19 @@ async def auth():
             return jsonify({"intent":"error","description":"Invalid auth action"}), 400
 
 
+@app.route("/get-results", methods=["GET"])
+def get_results():
+    with db.bind.Session() as s:
+        with s.begin():
+            results = [{
+                "id": result.id,
+                "player_o": result.player_o,
+                "player_x": result.player_x,
+                "result": result.result
+            } for result in s.scalars(select(TicTacToeGameResult).limit(10))]
+    return jsonify({"intent": "success", "results": results})
+
+
 def get_user_data(token):
     try:
         response = cognito.get_user(AccessToken=token)
@@ -350,7 +363,7 @@ async def handle_message(ctx, message):
                 games.pop(game.player_x)
                 player_data.pop(game.player_o)
                 player_data.pop(game.player_x)
-                store_result(game.player_o_name, game.player_x_name, str(result))
+                store_result(game.player_o_name, game.player_x_name, result.value)
 
         case _:
             raise ValueError("Invalid intent")
