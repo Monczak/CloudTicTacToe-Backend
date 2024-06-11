@@ -12,6 +12,10 @@ import botocore.errorfactory
 import botocore.exceptions
 import aioboto3
 from quart import Quart, websocket, request, jsonify, send_file
+from quart_sqlalchemy import SQLAlchemyConfig
+from quart_sqlalchemy.framework import QuartSQLAlchemy
+from sqlalchemy import Identity, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column
 import requests
 
 from game.tictactoe import Player, TicTacToeGame, MoveResult
@@ -20,6 +24,24 @@ REGION = "us-east-1"
 AVATAR_BUCKET = "cloudtictactoe-avatars"
 
 app = Quart(__name__)
+
+db = QuartSQLAlchemy(
+    config=SQLAlchemyConfig(
+        binds=dict(
+            default=dict(
+                engine=dict(
+                    url=f"mysql+pymysql://{os.environ['DB_USERNAME']}:{os.environ['DB_PASSWORD']}@{os.environ['DB_ENDPOINT']}/main",
+                    echo=True,
+                ),
+                session=dict(
+                    expire_on_commit=False,
+                )
+            )
+        )
+    ),
+    app=app,
+)
+
 cognito = boto3.client("cognito-idp", region_name=REGION)
 s3 = boto3.client("s3", region_name=REGION, 
                   aws_access_key_id=os.environ["aws_access_key_id"], 
@@ -29,8 +51,15 @@ s3 = boto3.client("s3", region_name=REGION,
 matchmaking_queue = set()
 connected = set()
 
-
 client_id = os.environ["COGNITO_CLIENT_ID"]
+
+
+class TicTacToeGameResult(db.Model):
+    __tablename__ = "tic_tac_toe_game_result"
+    id: Mapped[int] = mapped_column(Identity(), primary_key=True, autoincrement=True)
+    player_o: Mapped[str] = mapped_column(String(32))
+    player_x: Mapped[str] = mapped_column(String(32))
+    result: Mapped[str] = mapped_column(String(10))
 
 
 class TicTacToeGameWrapper:
@@ -120,7 +149,7 @@ async def get_avatar():
     url = f"https://{AVATAR_BUCKET}.s3.amazonaws.com/{username}"
     response = requests.get(url)
     if response.status_code == 200:
-        return jsonify({"intent": "success", "url": f"https://{AVATAR_BUCKET}.s3.amazonaws.com/{username}"})
+        return jsonify({"intent": "success", "url": url})
         
     return jsonify({"intent": "error", "description": "No avatar found for this user"})
 
@@ -245,6 +274,17 @@ def get_user_data(token):
                 return jsonify({"intent":"error","description":e.response["Error"]["Message"]}), 400
 
 
+def store_result(player_o, player_x, result):
+    db.create_all()
+
+    with db.bind.Session() as s:
+        with s.begin():
+            result = TicTacToeGameResult(player_o=player_o, player_x=player_x, result=result)
+            s.add(result)
+            s.flush()
+            s.refresh(result)
+
+
 async def handle_message(ctx, message):
     token = message.get("token")
 
@@ -310,6 +350,7 @@ async def handle_message(ctx, message):
                 games.pop(game.player_x)
                 player_data.pop(game.player_o)
                 player_data.pop(game.player_x)
+                store_result(game.player_o_name, game.player_x_name, str(result))
 
         case _:
             raise ValueError("Invalid intent")
@@ -330,6 +371,9 @@ async def ws(ctx):
 
             if ctx in games:
                 game = games[ctx]
+
+                store_result(game.player_o_name, game.player_x_name, "disconnect")
+
                 games.pop(game.player_o)
                 games.pop(game.player_x)
                 player_data.pop(game.player_o)
