@@ -14,7 +14,7 @@ import aioboto3
 from quart import Quart, websocket, request, jsonify, send_file
 from quart_sqlalchemy import SQLAlchemyConfig
 from quart_sqlalchemy.framework import QuartSQLAlchemy
-from sqlalchemy import Identity, Integer, String, select
+from sqlalchemy import Identity, Integer, String, select, desc
 from sqlalchemy.orm import Mapped, mapped_column
 import requests
 
@@ -264,7 +264,7 @@ def get_results():
                 "player_o": result.player_o,
                 "player_x": result.player_x,
                 "result": result.result
-            } for result in s.scalars(select(TicTacToeGameResult).limit(10))]
+            } for result in s.scalars(select(TicTacToeGameResult).order_by(desc(TicTacToeGameResult.id)).limit(10))]
     return jsonify({"intent": "success", "results": results})
 
 
